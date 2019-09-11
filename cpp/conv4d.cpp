@@ -8,8 +8,8 @@
 at::Tensor conv4d_forward(
     at::Tensor inputs,
     at::Tensor weight,
-    int input_channels,
-    int output_channels,
+    int channels_in,
+    int channels_out,
     int ksize,
     int stride,
     int padding,
@@ -23,7 +23,7 @@ at::Tensor conv4d_forward(
   int W_in = inputs.size(5);
 
   int B_out = B_in;
-  int C_out = output_channels;
+  int C_out = channels_out;
   int U_out = (U_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
   int V_out = (V_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
   int H_out = (H_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
@@ -113,8 +113,8 @@ vector<at::Tensor> conv4d_backward(
     at::Tensor grad_outputs,
     at::Tensor inputs,
     at::Tensor weight,
-    int input_channels,
-    int output_channels,
+    int channels_in,
+    int channels_out,
     int ksize,
     int stride,
     int padding,

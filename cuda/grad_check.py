@@ -2,43 +2,27 @@ import argparse
 import torch
 import random
 from torch.autograd import Variable, gradcheck
-from sgmflow import *
+from conv4d import *
 
-parser = argparse.ArgumentParser()
-parser.add_argument('example', choices=['py', 'cpp', 'cuda'])
-parser.add_argument('-b', '--batch-size', type=int, default=3)
-parser.add_argument('-f', '--features', type=int, default=17)
-parser.add_argument('-s', '--state-size', type=int, default=5)
-parser.add_argument('-c', '--cuda', action='store_true')
-options = parser.parse_args()
+f = torch.randn(2,3,5,5,5,5).double().cuda()
+f.requires_grad_()
 
-H = 2
-W = 2
-C = 32
-B = 1
+ksize = 3
+stride = 1
+padding = 2
+dilation = 2
+input_channels = 3
+output_channels = 4
 
-f1 = torch.randn(B,C,H,W).cuda().double()
-f2 = torch.randn(B,C,H,W).cuda().double()
+w = torch.randn(output_channels, input_channels*ksize**4).double().cuda()
+b = torch.randn(1,output_channels,1,1,1,1).double().cuda()
 
-f1.requires_grad_()
-f2.requires_grad_()
+w = w.requires_grad_()
+b = b.requires_grad_()
 
-max_offset_h = 1
-max_offset_w = 1
+variables = [f, w, b, input_channels, output_channels, ksize, stride, padding, dilation]
 
-variables = [f1, f2, max_offset_h, max_offset_w]
-
-if gradcheck(CostFunction.apply, variables, eps=1e-3, atol=1e-5, rtol=1e-3):
+if gradcheck(Conv4dFunction.apply, variables, eps=1e-3, atol=1e-5, rtol=1e-3):
     print('Ok')
 
-l = (2*max_offset_h+1) * (2*max_offset_w+1)
-C = torch.randn(1,l,2,2).cuda()
-e = 0.01*torch.randn(1,1,2,2).cuda()
 
-C.requires_grad_()
-e.requires_grad_()
-
-variables = [C, e, max_offset_h, max_offset_w]
-
-if gradcheck(PropFunction.apply, variables, eps=1e-3, atol=1e-5, rtol=1e-3):
-    print('Ok')
