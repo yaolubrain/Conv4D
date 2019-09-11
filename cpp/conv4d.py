@@ -34,19 +34,20 @@ class Cost(nn.Module):
 class Conv4dFunction(Function):
 
     @staticmethod
-    def forward(ctx, inputs, weight, bias, input_channels, output_channels, ksize, stride, padding):
+    def forward(ctx, inputs, weight, bias, input_channels, output_channels, ksize, stride, padding, dilation):
         ctx.input_channels = input_channels
         ctx.output_channels = output_channels
         ctx.ksize = ksize
         ctx.stride = stride
         ctx.padding = padding
+        ctx.dilation = dilation
         ctx.bias = False
 
         outputs = conv4d_cpp.conv4d_forward(inputs, weight, \
                                             input_channels, output_channels, \
-                                            ksize, stride, padding)
+                                            ksize, stride, padding, dilation)
 
-        if bias:
+        if type(bias) != type(None):
             ctx.bias = True
             outputs += bias
 
@@ -58,7 +59,7 @@ class Conv4dFunction(Function):
     def backward(ctx, grad_outputs):
         inputs, weight = ctx.saved_variables
 
-        grad_inputs, grad_weight = conv4d_cpp.conv4d_backward(grad_outputs, inputs, weight, ctx.input_channels, ctx.output_channels, ctx.ksize, ctx.stride, ctx.padding)
+        grad_inputs, grad_weight = conv4d_cpp.conv4d_backward(grad_outputs, inputs, weight, ctx.input_channels, ctx.output_channels, ctx.ksize, ctx.stride, ctx.padding, ctx.dilation)
 
         grad_bias = None
 
@@ -70,7 +71,7 @@ class Conv4dFunction(Function):
 
 class Conv4d(nn.Module):
 
-    def __init__(self, input_channels, output_channels, ksize=1, stride=1, padding=0, bias=True):
+    def __init__(self, input_channels, output_channels, ksize=1, stride=1, padding=0, dilation=1, bias=True):
 
         super().__init__()
 
@@ -79,13 +80,14 @@ class Conv4d(nn.Module):
         self.ksize = ksize
         self.stride = stride
         self.padding = padding
+        self.dilation = dilation
 
         self.weight = torch.randn(output_channels, input_channels*ksize**4)
 
         if bias:
             self.bias = torch.randn(1,output_channels,1,1,1,1)
         else:
-            self.bias = False
+            self.bias = None
     
     def forward(self, inputs):
-        return Conv4dFunction.apply(inputs, self.weight, self.bias, self.input_channels, self.output_channels, self.ksize, self.stride, self.padding)
+        return Conv4dFunction.apply(inputs, self.weight, self.bias, self.input_channels, self.output_channels, self.ksize, self.stride, self.padding, self.dilation)

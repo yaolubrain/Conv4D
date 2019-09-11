@@ -12,7 +12,8 @@ at::Tensor conv4d_forward(
     int output_channels,
     int ksize,
     int stride,
-    int padding) {
+    int padding,
+    int dilation) {
 
   int B_in = inputs.size(0);
   int C_in = inputs.size(1);
@@ -23,10 +24,10 @@ at::Tensor conv4d_forward(
 
   int B_out = B_in;
   int C_out = output_channels;
-  int U_out = (U_in - ksize / 2) / stride + padding;
-  int V_out = (V_in - ksize / 2) / stride + padding;
-  int H_out = (H_in - ksize / 2) / stride + padding;
-  int W_out = (W_in - ksize / 2) / stride + padding;
+  int U_out = (U_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
+  int V_out = (V_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
+  int H_out = (H_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
+  int W_out = (W_in + 2*padding - dilation*(ksize - 1) - 1) / stride + 1;
 
   at::Tensor outputs = torch::zeros({B_out, C_out, U_out, V_out, H_out, W_out}, inputs.type());
 
@@ -46,15 +47,15 @@ at::Tensor conv4d_forward(
           for (int h = 0; h < H_out; ++h) {
             for (int w = 0; w < W_out; ++w) {
 
-              for (int du = -ksize/2; du <= ksize/2; ++du) {
-                for (int dv = -ksize/2; dv <= ksize/2; ++dv) {
-                  for (int dh = -ksize/2; dh <= ksize/2; ++dh) {
-                    for (int dw = -ksize/2; dw <= ksize/2; ++dw) {
+              for (int du = 0; du < ksize; ++du) {
+                for (int dv = 0; dv < ksize; ++dv) {
+                  for (int dh = 0; dh < ksize; ++dh) {
+                    for (int dw = 0; dw < ksize; ++dw) {
 
-                      int u1 = u + du;
-                      int v1 = v + dv;
-                      int h1 = h + dh;
-                      int w1 = w + dw;
+                      int u1 = u*stride + du*dilation - padding;
+                      int v1 = v*stride + dv*dilation - padding;
+                      int h1 = h*stride + dh*dilation - padding;
+                      int w1 = w*stride + dw*dilation - padding;
 
                       if (u1 < 0 || u1 >= U_in) {
                         continue;
@@ -77,17 +78,17 @@ at::Tensor conv4d_forward(
                                       + v*H_out*W_out
                                       + h*W_out + w;
 
-                          int in_idx = c_in*U_out*V_out*H_out*W_out
-                                     + u1*V_out*H_out*W_out
-                                     + v1*H_out*W_out
-                                     + h1*W_out + w1;
+                          int in_idx = c_in*U_in*V_in*H_in*W_in
+                                     + u1*V_in*H_in*W_in
+                                     + v1*H_in*W_in
+                                     + h1*W_in + w1;
  
                           int weight_idx = c_out*C_in*ksize*ksize*ksize*ksize
                                          + c_in*ksize*ksize*ksize*ksize
-                                         + (du+ksize/2)*ksize*ksize*ksize
-                                         + (dv+ksize/2)*ksize*ksize
-                                         + (dh+ksize/2)*ksize
-                                         + (dw+ksize/2);
+                                         + du*ksize*ksize*ksize
+                                         + dv*ksize*ksize
+                                         + dh*ksize
+                                         + dw;
 
                           output[out_idx] += input[in_idx] * weight_data[weight_idx];
                         }
@@ -111,12 +112,13 @@ at::Tensor conv4d_forward(
 vector<at::Tensor> conv4d_backward(
     at::Tensor grad_outputs,
     at::Tensor inputs,
-    at::Tensor weight, 
-    int input_channels, 
-    int output_channels, 
-    int ksize, 
-    int stride, 
-    int padding) {
+    at::Tensor weight,
+    int input_channels,
+    int output_channels,
+    int ksize,
+    int stride,
+    int padding,
+    int dilation) {
 
   int B_out = grad_outputs.size(0);
   int C_out = grad_outputs.size(1);
@@ -125,12 +127,12 @@ vector<at::Tensor> conv4d_backward(
   int H_out = grad_outputs.size(4);
   int W_out = grad_outputs.size(5);
 
-  int B_in = B_out;
-  int C_in = input_channels;
-  int U_in = (U_out + ksize / 2) * stride - padding;
-  int V_in = (V_out + ksize / 2) * stride - padding;
-  int H_in = (H_out + ksize / 2) * stride - padding;
-  int W_in = (W_out + ksize / 2) * stride - padding;
+  int B_in = inputs.size(0);
+  int C_in = inputs.size(1);
+  int U_in = inputs.size(2);
+  int V_in = inputs.size(3);
+  int H_in = inputs.size(4);
+  int W_in = inputs.size(5);
 
   at::Tensor grad_inputs = torch::zeros({B_in, C_in, U_in, V_in, H_in, W_in}, grad_outputs.type());
   at::Tensor grad_weight = torch::zeros_like(weight);
@@ -154,15 +156,15 @@ vector<at::Tensor> conv4d_backward(
           for (int h = 0; h < H_out; ++h) {
             for (int w = 0; w < W_out; ++w) {
 
-              for (int du = -ksize/2; du <= ksize/2; ++du) {
-                for (int dv = -ksize/2; dv <= ksize/2; ++dv) {
-                  for (int dh = -ksize/2; dh <= ksize/2; ++dh) {
-                    for (int dw = -ksize/2; dw <= ksize/2; ++dw) {
+              for (int du = 0; du < ksize; ++du) {
+                for (int dv = 0; dv < ksize; ++dv) {
+                  for (int dh = 0; dh < ksize; ++dh) {
+                    for (int dw = 0; dw < ksize; ++dw) {
 
-                      int u1 = u + du;
-                      int v1 = v + dv;
-                      int h1 = h + dh;
-                      int w1 = w + dw;
+                      int u1 = u*stride + du*dilation - padding;
+                      int v1 = v*stride + dv*dilation - padding;
+                      int h1 = h*stride + dh*dilation - padding;
+                      int w1 = w*stride + dw*dilation - padding;
 
                       if (u1 < 0 || u1 >= U_in) {
                         continue;
@@ -185,17 +187,17 @@ vector<at::Tensor> conv4d_backward(
                                       + v*H_out*W_out
                                       + h*W_out + w;
 
-                          int in_idx = c_in*U_out*V_out*H_out*W_out
-                                     + u1*V_out*H_out*W_out
-                                     + v1*H_out*W_out
-                                     + h1*W_out + w1;
+                          int in_idx = c_in*U_in*V_in*H_in*W_in
+                                     + u1*V_in*H_in*W_in
+                                     + v1*H_in*W_in
+                                     + h1*W_in + w1;
  
                           int weight_idx = c_out*C_in*ksize*ksize*ksize*ksize
                                          + c_in*ksize*ksize*ksize*ksize
-                                         + (du+ksize/2)*ksize*ksize*ksize
-                                         + (dv+ksize/2)*ksize*ksize
-                                         + (dh+ksize/2)*ksize
-                                         + (dw+ksize/2);
+                                         + du*ksize*ksize*ksize
+                                         + dv*ksize*ksize
+                                         + dh*ksize
+                                         + dw;
 
                           grad_input[in_idx] += grad_output[out_idx] * weight_data[weight_idx];
                           grad_weight_data[weight_idx] += input[in_idx] * grad_output[out_idx];
