@@ -7,10 +7,8 @@
 using namespace std;
 
 const int CUDA_NUM_THREADS = 1024;
-const int BSIZE_U = 1;
-const int BSIZE_V = 1;
+const int BSIZE_H = 1;
 const int BSIZE_W = 32;
-const int BSIZE_H = 4;
 
 #define CUDA_KERNEL_LOOP(i, n) \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
@@ -45,34 +43,59 @@ __global__ void conv4d_forward_kernel(T *output,
   int h = blockIdx.y * blockDim.y + threadIdx.y;
   int w = blockIdx.x * blockDim.x + threadIdx.x;
 
-  int idx_local = threadIdx.y * BSIZE_W + threadIdx.x;
+  int tid = threadIdx.y * BSIZE_W + threadIdx.x;
 
-  if (u >= U_out || v >= V_out || w >= W_out || h >= H_out) {
-    return;
+  __shared__ T smem_input[3*3*3*(BSIZE_W + 2)];
+  __shared__ T smem_weight[3*3*3*3];
+
+  for (int du = -1; du <= 1; ++du) {
+    for (int dv = -1; dv <= 1; ++dv) {
+      for (int dh = -1; dh <= 1; ++dh) {
+
+        int u1 = u + du;
+        int v1 = v + dv;
+        int h1 = h + dh;
+        int w1 = w;
+
+        if (u1 < 0 || u1 >= U_out || 
+            v1 < 0 || v1 >= V_out || 
+            h1 < 0 || h1 >= H_out || 
+            w1 < 0 || w1 >= W_out) {
+          continue;
+        }
+
+        int idx_sm = (du+1) * 3 * 3 * BSIZE_W
+                   + (dv+1) * 3 * BSIZE_W
+                   + (dh+1) * BSIZE_W
+                   + tid;
+
+        int idx_in = u1 * 3 * 3 * BSIZE_W
+                   + v1 * 3 * BSIZE_W
+                   + h1 * BSIZE_W
+                   + w;
+
+        smem_input[idx_sm] = input[idx_in];
+      }
+    }
   }
 
-  __shared__ T smem_input[BSIZE_U*BSIZE_V*BSIZE_H*BSIZE_W];
-  __shared__ T smem_weight[BSIZE_H*BSIZE_W];
+
 
   /*
-  for (int i = 0; i < ksize*ksize*ksize*ksize; ++i) {
+  if (tid == 0) {
 
-    int du = i / (ksize*ksize*ksize);
-    int dv = i % (ksize*ksize*ksize) / ksize;
-    int dh = i % (ksize*ksize) / ksize;
-    int dw = i % ksize;
-
-    output[idx_out] += 1;
+    smem_input[tid] = input[idx_in];
   }
   */
 
+
   /*
-  for (int i = 0; i < ksize*ksize*ksize*ksize; ++i) {
-    int du = i / (ksize*ksize*ksize);
-    int dv = i % (ksize*ksize*ksize) / ksize;
-    int dh = i % (ksize*ksize) / ksize;
-    int dw = i % ksize;
-    */
+  for (int i = tid; i < 3*3*3*3; i += BSIZE_H*BSIZE_W) {
+    smem_weight[i] = weight[i];
+  }
+
+  __syncthreads();
+
 
   for (int c_out = 0; c_out < C_out; ++c_out) {
 
@@ -83,7 +106,7 @@ __global__ void conv4d_forward_kernel(T *output,
       for (int i = 0; i < ksize*ksize*ksize*ksize; ++i) {
 
         int du = i / (ksize*ksize*ksize);
-        int dv = i % (ksize*ksize*ksize) / ksize;
+        int dv = i % (ksize*ksize*ksize) / (ksize*ksize);
         int dh = i % (ksize*ksize) / ksize;
         int dw = i % ksize;
 
@@ -92,41 +115,18 @@ __global__ void conv4d_forward_kernel(T *output,
         int h1 = h*stride + dh*dilation - padding;
         int w1 = w*stride + dw*dilation - padding;
 
-        int idx_in = c_in*BSIZE_H*BSIZE_W
-                   + u1*V_in*H_in*W_in
-                   + v1*H_in*W_in
-                   + h1*BSIZE_W + w1;
-
-        output_local += smem_input[idx_local] * smem_weight[idx_local];
-      }
-    }
-
-    int idx_out = c_out*U_out*V_out*H_out*W_out
-                + u*V_out*H_out*W_out
-                + v*H_out*W_out
-                + h*W_out + w;
-
-    output[idx_out] = output_local;
-
-  }
-
-
-/*
-  int idx_out = u*V_out*H_out*W_out
-              + v*H_out*W_out
-              + h*W_out + w;
-*/
-
-//  output[idx_out] = smem_output[idx_local];
-
-    /*
-    for (int c_out = 0; c_out < C_out; c_out++) {
-      for (int c_in = 0; c_in < C_in; c_in++) {
-
-        int idx_out = c_out*U_out*V_out*H_out*W_out
-                    + u*V_out*H_out*W_out
-                    + v*H_out*W_out
-                    + h*W_out + w;
+        if (u1 < 0 || u1 >= U_in) {
+          continue;
+        }
+        if (v1 < 0 || v1 >= V_in) {
+          continue;
+        }
+        if (h1 < 0 || h1 >= H_in) {
+          continue;
+        }
+        if (w1 < 0 || w1 >= W_in) {
+          continue;
+        }
 
         int idx_in = c_in*U_in*V_in*H_in*W_in
                    + u1*V_in*H_in*W_in
@@ -140,11 +140,27 @@ __global__ void conv4d_forward_kernel(T *output,
                        + dh*ksize
                        + dw;
 
-        //output[idx_out] = 1;
-        output[idx_out] += input[idx_in] * weight[idx_weight];
+
+
+//        output_local += input[idx_in] * smem_weight[i];
+//        output_local += input[idx_in] * weight[idx_weight];
+//        output_local += smem_input[tid] * weight[i];
+        output_local += smem_input[tid] * smem_weight[i];
       }
     }
+
+    int idx_out = c_out*U_out*V_out*H_out*W_out
+                + u*V_out*H_out*W_out
+                + v*H_out*W_out
+                + h*W_out + w;
+
+    if (u >= U_out || v >= V_out || w >= W_out || h >= H_out) {
+      return;
+    }
+
+    output[idx_out] = output_local;
   }
+
 
 */
 
@@ -251,8 +267,8 @@ at::Tensor conv4d_forward_cuda(
       auto input = inputs_data + i * C_in*U_in*V_in*H_in*W_in;
       auto output = outputs_data + i * C_out*U_out*V_out*H_out*W_out;
 
-      dim3 gdim(W_out/BSIZE_W + 1, H_out/BSIZE_H + 1, U_out*V_out/(BSIZE_U*BSIZE_V) + 1);
-      dim3 bdim(BSIZE_W, BSIZE_H, BSIZE_U*BSIZE_V);
+      dim3 gdim((W_out+BSIZE_W-1)/BSIZE_W, (H_out+BSIZE_H-1)/BSIZE_H, U_out*V_out);
+      dim3 bdim(BSIZE_W, BSIZE_H, 1);
 
       conv4d_forward_kernel<<<gdim, bdim>>> (
         output, input, weight_data, channels_in, channels_out,

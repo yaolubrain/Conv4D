@@ -4,12 +4,12 @@ import time
 from PIL import Image
 from conv4d import *
 
-f1 = torch.randn(1,3,5,1,1,5).cuda()
+f1 = torch.randn(1,1,1,1,5,5).cuda()
 #f1 = torch.randn(1,1,1,1,5,5)
-f2 = f1.view(1,3,5,5)
+f2 = f1.view(1,1,5,5)
 
-conv4d = Conv4d(3,1,3,1,1,1,bias=False).cuda()
-conv2d = torch.nn.Conv2d(3,1,3,1,1,1,bias=False).cuda()
+conv4d = Conv4d(1,1,3,1,1,1,bias=False).cuda()
+conv2d = torch.nn.Conv2d(1,1,3,1,1,1,bias=False).cuda()
 conv4d.weight.data.fill_(1) 
 conv2d.weight.data.fill_(1)
 
