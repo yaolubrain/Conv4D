@@ -48,7 +48,7 @@ model.cuda()
 
 param = list(model.parameters()) 
 
-opt = torch.optim.Adam(param, lr=1e-2)
+opt = torch.optim.Adam(param, lr=1e-3)
 
 
 for i in range(500):
@@ -58,13 +58,28 @@ for i in range(500):
     f1 = f(I)
     f2 = f(J)
 
+    tic = time.time()
     c = cost(f1, f2)
     c = c.view(1, 1, 2*DH+1, 2*DW+1, H, W)
+    torch.cuda.synchronize()
+    toc = time.time()
+#    print(toc - tic)
 
+
+    tic = time.time()
     t = model(c)
+    torch.cuda.synchronize()
+    toc = time.time()
+    print(toc - tic)
 
     L = t.pow(2).mean()
+
+    tic = time.time()
     L.backward()
+    torch.cuda.synchronize()
+    toc = time.time()
+
+#    print(toc - tic)
 
     opt.step()
     print(L.item())

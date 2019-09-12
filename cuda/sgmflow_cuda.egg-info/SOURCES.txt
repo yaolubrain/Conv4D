@@ -1,8 +1,0 @@
-cost_volume.cu
-setup.py
-sgmflow.cpp
-sgmflow_kernel.cu
-sgmflow_cuda.egg-info/PKG-INFO
-sgmflow_cuda.egg-info/SOURCES.txt
-sgmflow_cuda.egg-info/dependency_links.txt
-sgmflow_cuda.egg-info/top_level.txt
