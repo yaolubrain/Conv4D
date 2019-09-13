@@ -5,6 +5,7 @@ from PIL import Image
 from conv4d import *
 
 f1 = torch.randn(1,1,1,1,5,5).cuda()
+#f1 = torch.ones(1,1,1,1,3,3).cuda()
 #f1 = torch.randn(1,1,1,1,5,5)
 f2 = f1.view(1,1,5,5)
 
@@ -23,6 +24,8 @@ print(g1.view(g2.size()))
 print(g2)
 
 
+#while 1:
+#    pass
 
 H = 128
 W = 256
