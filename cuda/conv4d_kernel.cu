@@ -8,7 +8,8 @@ using namespace std;
 
 const int CUDA_NUM_THREADS = 1024;
 const int BSIZE_H = 1;
-const int BSIZE_W = 32;
+const int BSIZE_W = 2;
+const int MAX_CONST_MEM_SIZE = 2048;
 
 #define CUDA_KERNEL_LOOP(i, n) \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
@@ -17,7 +18,8 @@ inline int GET_BLOCKS(const int N) {
     return (N + CUDA_NUM_THREADS - 1) / CUDA_NUM_THREADS;
 }
 
-__device__ __constant__ float const_weight[3*3*3*3];
+__device__ __constant__ float const_weight[MAX_CONST_MEM_SIZE];
+
 
 template <typename T>
 __global__ void conv4d_forward_kernel(T *output,
@@ -57,12 +59,6 @@ __global__ void conv4d_forward_kernel(T *output,
 
     for (int c_in = 0; c_in < C_in; ++c_in) {
 
-      /*
-      for (int i = 0; i < n; i++) {
-        smem_input[threadIdx.x + i*BSIZE_W] = input[threadIdx.x];
-      }
-      */
-
       for (int i = tid; i < n*BSIZE_W; i += BSIZE_W) {
 
         int du = i / (3*3*3*BSIZE_W);
@@ -93,8 +89,164 @@ __global__ void conv4d_forward_kernel(T *output,
 
       __syncthreads();
 
+//      if (h == 2 && w == 2 && u == 1 && v == 1) {
+      if (tid == 0) {
+
+        for (int k = 0; k < BSIZE_W; ++k) {
+          for (int i = 0; i < 9; ++i) {
+            for (int j = 0; j < 9; ++j) {
+              printf("%.2f ", smem_input[i*9*BSIZE_W + j*BSIZE_W + k]);
+              smem_input[i*9*BSIZE_W + j*BSIZE_W + k] = 0;
+            }
+            printf("\n");
+          }
+          printf("\n");
+        }
+        printf("\n");
+      }
+
+      __syncthreads();
+
+      #pragma unroll
+      for (int i = 0; i < 27; i++) {
+
+        int du = i / 9;
+        int dv = i % 9 / 3;
+        int dh = i % 3;
+
+        int u2 = u + du - 1;
+        int v2 = v + dv - 1;
+        int h2 = h + dh - 1;
+        int w2 = w;
+
+        T val = 0;
+
+        if (u2 >= 0 && u2 < U_out &&
+            v2 >= 0 && v2 < V_out &&
+            h2 >= 0 && h2 < H_out &&
+            w2 >= 0 && w2 < W_out) {
+
+          int idx_in = c_in*U_in*V_in*H_in*W_in
+                     + u2*V_in*H_in*W_in
+                     + v2*H_in*W_in
+                     + h2*W_in + w2;
+
+          val = input[idx_in];
+        }
+
+        int idx_sm = du*3*3*3*BSIZE_W
+                   + dv*3*3*BSIZE_W
+                   + dh*3*BSIZE_W
+                   + 1*BSIZE_W
+                   + threadIdx.x;
+
+        smem_input[idx_sm] = val;
+
+        int idx_sm_l = du*3*3*3*BSIZE_W
+                     + dv*3*3*BSIZE_W
+                     + dh*3*BSIZE_W
+                     + 2*BSIZE_W
+                     + threadIdx.x - 1;
+
+        if (threadIdx.x - 1 < BSIZE_W) {
+          smem_input[idx_sm_l] = val;
+        }
+
+        int idx_sm_r = du*3*3*3*BSIZE_W
+                     + dv*3*3*BSIZE_W
+                     + dh*3*BSIZE_W
+                     + 0*BSIZE_W
+                     + threadIdx.x + 1;
+
+        if (threadIdx.x + 1 < BSIZE_W) {
+          smem_input[idx_sm_r] = val;
+        }
+      }
+
+
+      for (int i = 0; i < 27; i++) {
+
+        int du = i / 9;
+        int dv = i % 9 / 3;
+        int dh = i % 3;
+
+        int u2 = u + du - 1;
+        int v2 = v + dv - 1;
+        int h2 = h + dh - 1;
+        int w2 = w;
+
+        if (tid == 0) {
+
+          int idx_sm = du*3*3*3*BSIZE_W
+                     + dv*3*3*BSIZE_W
+                     + dh*3*BSIZE_W
+                     + 0*BSIZE_W
+                     + 0;
+
+          w2 = w - 1;
+
+          if (u2 >= 0 && u2 < U_out &&
+              v2 >= 0 && v2 < V_out &&
+              h2 >= 0 && h2 < H_out &&
+              w2 >= 0 && w2 < W_out) {
+
+            int idx_in = c_in*U_in*V_in*H_in*W_in
+                       + u2*V_in*H_in*W_in
+                       + v2*H_in*W_in
+                       + h2*W_in + w2;
+
+            smem_input[idx_sm] = input[idx_in];
+          }
+        }
+
+        if (tid == BSIZE_W - 1) {
+
+          int idx_sm = du*3*3*3*BSIZE_W
+                 + dv*3*3*BSIZE_W
+                 + dh*3*BSIZE_W
+                 + 2*BSIZE_W
+                 + BSIZE_W - 1;
+
+          w2 = w + 1;
+
+          if (u2 >= 0 && u2 < U_out &&
+              v2 >= 0 && v2 < V_out &&
+              h2 >= 0 && h2 < H_out &&
+              w2 >= 0 && w2 < W_out) {
+
+            int idx_in = c_in*U_in*V_in*H_in*W_in
+                       + u2*V_in*H_in*W_in
+                       + v2*H_in*W_in
+                       + h2*W_in + w2;
+
+            smem_input[idx_sm] = input[idx_in];
+          }
+        }
+      }
+
+      __syncthreads();
+
+      /*
+      if (tid == 0) {
+
+        for (int k = 0; k < BSIZE_W; ++k) {
+          for (int i = 0; i < 9; ++i) {
+            for (int j = 0; j < 9; ++j) {
+              printf("%.2f ", smem_input[i*9*BSIZE_W + j*BSIZE_W + k]);
+//            smem_input[i*9 + j] = 0;
+            }
+            printf("\n");
+          }
+          printf("\n");
+        }
+        printf("\n");
+      }
+
+      __syncthreads();
+*/
+
       for (int i = 0; i < n; ++i) {
-        output_local += smem_input[i*BSIZE_W + threadIdx.x] * const_weight[i];
+        output_local += smem_input[i*BSIZE_W + threadIdx.x] * const_weight[c_out*C_in*n + c_in*n + i];
       }
     }
 
@@ -374,7 +526,7 @@ at::Tensor conv4d_forward_cuda(
     auto outputs_data = outputs.data<scalar_t>();
     auto weight_data = weight.data<scalar_t>();
 
-    cudaMemcpyToSymbol(const_weight, weight_data, channels_in*3*3*3*3*sizeof(float), 0, cudaMemcpyDeviceToDevice);
+    cudaMemcpyToSymbol(const_weight, weight_data, channels_out*channels_in*3*3*3*3*sizeof(float), 0, cudaMemcpyDeviceToDevice);
 
     for (int i = 0; i < B_out; ++i) {
 

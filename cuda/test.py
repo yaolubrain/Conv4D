@@ -4,10 +4,17 @@ import time
 from PIL import Image
 from conv4d import *
 
-f1 = torch.randn(1,1,1,1,5,5).cuda()
-#f1 = torch.ones(1,1,1,1,3,3).cuda()
+U = 1
+V = 1
+H = 2
+W = 3
+
+f1 = torch.randn(1,1,1,1,H,W).cuda()
+#f1 = torch.ones(1,1,1,1,H,W).cuda()
+#f1 = torch.zeros(1,1,1,1,5,5).cuda()
 #f1 = torch.randn(1,1,1,1,5,5)
-f2 = f1.view(1,1,5,5)
+f2 = f1.view(1,1,H,W)
+print(f1)
 
 conv4d = Conv4d(1,1,3,1,1,1,bias=False).cuda()
 conv2d = torch.nn.Conv2d(1,1,3,1,1,1,bias=False).cuda()
@@ -24,8 +31,8 @@ print(g1.view(g2.size()))
 print(g2)
 
 
-#while 1:
-#    pass
+while 1:
+    pass
 
 H = 128
 W = 256
