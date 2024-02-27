@@ -1,3 +1,3 @@
-# 4D Convolution in CUDA with PyTorch interface
+# 4D Convolution and Cost Volume in CUDA
 
-I wrote a simple 4D convolution layer in CUDA. Currently, it supports only 4x4x4x4 kernel size.
+A simple 4D convolution layer and 4D cost volume layer in CUDA with Pytorch interface.
