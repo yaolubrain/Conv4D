@@ -90,20 +90,20 @@ __global__ void conv4d_forward_kernel(T *output,
       __syncthreads();
 
 //      if (h == 2 && w == 2 && u == 1 && v == 1) {
-      if (tid == 0) {
-
-        for (int k = 0; k < BSIZE_W; ++k) {
-          for (int i = 0; i < 9; ++i) {
-            for (int j = 0; j < 9; ++j) {
-              printf("%.2f ", smem_input[i*9*BSIZE_W + j*BSIZE_W + k]);
-              smem_input[i*9*BSIZE_W + j*BSIZE_W + k] = 0;
-            }
-            printf("\n");
-          }
-          printf("\n");
-        }
-        printf("\n");
-      }
+//      if (tid == 0) {
+//
+//        for (int k = 0; k < BSIZE_W; ++k) {
+//          for (int i = 0; i < 9; ++i) {
+//            for (int j = 0; j < 9; ++j) {
+//              printf("%.2f ", smem_input[i*9*BSIZE_W + j*BSIZE_W + k]);
+//              smem_input[i*9*BSIZE_W + j*BSIZE_W + k] = 0;
+//            }
+//            printf("\n");
+//          }
+//          printf("\n");
+//        }
+//        printf("\n");
+//      }
 
       __syncthreads();
 

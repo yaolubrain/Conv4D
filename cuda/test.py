@@ -31,9 +31,6 @@ print(g1.view(g2.size()))
 print(g2)
 
 
-while 1:
-    pass
-
 H = 128
 W = 256
 DH = 50
@@ -80,7 +77,7 @@ for i in range(500):
     t = model(c)
     torch.cuda.synchronize()
     toc = time.time()
-    print(toc - tic)
+    # print(toc - tic)
 
     L = t.pow(2).mean()
 
