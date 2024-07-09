@@ -104,11 +104,11 @@ __global__ void conv4d_forward_kernel(T *output,
 //        }
 //        printf("\n");
 //      }
-
-      __syncthreads();
+//
+//      __syncthreads();
 
       #pragma unroll
-      for (int i = 0; i < 27; i++) {
+      for (int i = 0; i < 27; ++i) {
 
         int du = i / 9;
         int dv = i % 9 / 3;
@@ -164,7 +164,7 @@ __global__ void conv4d_forward_kernel(T *output,
       }
 
 
-      for (int i = 0; i < 27; i++) {
+      for (int i = 0; i < 27; ++i) {
 
         int du = i / 9;
         int dv = i % 9 / 3;
